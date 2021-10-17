@@ -12,21 +12,27 @@ import robocode.*;
 import robocode.util.Utils;
 
 /**
- *
+ * Robot creado para la asignatura de PROP 2021 - 2022.
  * @author Javier Delgado Lucena y Àlex Rocamora Parrillas
  */
+
 public class RobotIronPan extends AdvancedRobot{
 
-    /**
-     * @param args the command line arguments
-     */
     
-    private int scannedX = 0;
-    private int scannedY = 0;
+    // Variables globales
+    
+    private double scannedX = 0;
+    private double scannedY = 0;
     private double direction = 1;
     private double oldEnemyHeading = 0.0;
     
-    boolean scanned = false;
+    // Constante que define la velocidad de la bala.
+    
+    private double bulletVelocity = 20 - 3 * Rules.MAX_BULLET_POWER;
+    
+    /**
+     * Método que se ejecuta al empezar la pelea.
+     */
     
     public void run() {
         
@@ -37,8 +43,14 @@ public class RobotIronPan extends AdvancedRobot{
         setAdjustRadarForGunTurn(true);
     }
     
+    /**
+     * Función que se ejecuta cuando se escanea al robot rival.
+     * @param e Permite obtener información del robot escaneado.
+     */
     public void onScannedRobot(ScannedRobotEvent e) {
-        scanned = true;
+        
+        // Hacemos que el radar se quede fijo en lugar de que se mueva.
+        
         setTurnRadarRight(2.0 * Utils.normalRelativeAngleDegrees(getHeading() + e.getBearing() - getRadarHeading()));
         setTurnRight(e.getBearing());
         
@@ -51,59 +63,83 @@ public class RobotIronPan extends AdvancedRobot{
         }
         
         circularTarget(e);
-    } 
+    }
     
+    /**
+     * Función que se ejecuta cuando nuestro robot es golpeado por el rival.
+     * @param e Permite obtener información del disparo que hemos recibido.
+     */
     public void onHitByBullet(HitByBulletEvent e) {
         direction = -1;
         setTurnRight(e.getBearing() * - 30);
         setAhead(150 * direction);
     }
     
+    /**
+     * Función que se ejecuta cuando nuestro robot se choca con uno de los bordes.
+     * @param e Permite obtener información de la pared que hemos chocado
+     */
     public void onHitWall(HitWallEvent e) {
         setTurnRight(500);
         setAhead(800);
     }
     
+    /**
+     * Función que calcula donde disparar a partir de la posicion del enemigo utilizando una politica de target circular.
+     * @param e Permite obtener información del robot escaneado.
+     */
     public void circularTarget(ScannedRobotEvent e) {
         
-        double bulletPower = Math.min(3.0,getEnergy());
-        double myX = getX();
-        double myY = getY();
         double absoluteBearing = getHeadingRadians() + e.getBearingRadians();
-        double enemyX = getX() + e.getDistance() * Math.sin(absoluteBearing);
-        double enemyY = getY() + e.getDistance() * Math.cos(absoluteBearing);
-        double enemyHeading = e.getHeadingRadians();
-        double enemyHeadingChange = enemyHeading - oldEnemyHeading;
-        double enemyVelocity = e.getVelocity();
-        oldEnemyHeading = enemyHeading;
-
-        double deltaTime = 0;
-        double battleFieldHeight = getBattleFieldHeight(), 
-               battleFieldWidth = getBattleFieldWidth();
-        double predictedX = enemyX, predictedY = enemyY;
-        while((++deltaTime) * (20.0 - 3.0 * bulletPower) < 
-              Point2D.Double.distance(myX, myY, predictedX, predictedY)){		
-                predictedX += Math.sin(enemyHeading) * enemyVelocity;
-                predictedY += Math.cos(enemyHeading) * enemyVelocity;
-                enemyHeading += enemyHeadingChange;
-                if(	predictedX < 18.0 
-                        || predictedY < 18.0
-                        || predictedX > battleFieldWidth - 18.0
-                        || predictedY > battleFieldHeight - 18.0){
-
-                        predictedX = Math.min(Math.max(18.0, predictedX), 
-                            battleFieldWidth - 18.0);	
-                        predictedY = Math.min(Math.max(18.0, predictedY), 
-                            battleFieldHeight - 18.0);
-                        break;
-                }
-        }
         
-        double theta = Utils.normalAbsoluteAngle(Math.atan2(
-            predictedX - getX(), predictedY - getY()));
+        scannedX = getX() + e.getDistance() * Math.sin(absoluteBearing);
+        scannedY = getY() + e.getDistance() * Math.cos(absoluteBearing);
+        
+        double eHeading = e.getHeadingRadians();
+        double eHeadingChange = eHeading - oldEnemyHeading;
+        double eVelocity = e.getVelocity();
+        oldEnemyHeading = eHeading;
+        
+        predictedData(eHeading, eVelocity, eHeadingChange);
+        
+        double angleTheta = Utils.normalAbsoluteAngle(Math.atan2(scannedX - getX(), scannedY - getY()));
         
         setTurnRadarRightRadians(Utils.normalRelativeAngle(absoluteBearing - getRadarHeadingRadians()));
-        setTurnGunRightRadians(Utils.normalRelativeAngle(theta - getGunHeadingRadians()));
+        setTurnGunRightRadians(Utils.normalRelativeAngle(angleTheta - getGunHeadingRadians()));
+        
+        chooseShot(e);
+        
+    }
+    
+    /**
+     * Función que calcula la posición en la que puede estar el robot después de ser escaneado para poder
+     * disparar con precisión.
+     * @param eHeading se trata del rumbo analizado del enemigo en radianes.
+     * @param eVelocity se trata de la velocidad analizada del enemigo.
+     * @param eHeadingChange se trata de la predicción del rumbo del enemigo comparándola
+     * con la anterior.
+     */
+    public void predictedData(double eHeading, double eVelocity, double eHeadingChange){
+        
+        boolean exit = false;
+        double deltaTime = 0;
+        double predX = scannedX, predY = scannedY;
+        
+        while((++deltaTime) * bulletVelocity < Point2D.Double.distance(getX(), getY(), predX, predY)){		
+                predX += Math.sin(eHeading) * eVelocity;
+                predY += Math.cos(eHeading) * eVelocity;
+                eHeading += eHeadingChange;
+        }
+        
+        scannedX = predX;
+        scannedY = predY;
+    }
+    
+    /**
+     * Función que mide la potencia con la que podemos disparar.
+     * @param e Contiene información del robot.
+     */
+    public void chooseShot(ScannedRobotEvent e) {
         
         if(e.getDistance() < 500 && e.getDistance() > 200) {
             if(getEnergy() > 80){
@@ -119,6 +155,7 @@ public class RobotIronPan extends AdvancedRobot{
                 fire(2);
             }
         }
+        
     }
     
 }
