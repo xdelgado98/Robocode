@@ -51,9 +51,12 @@ public class RobotIronPan extends AdvancedRobot{
         
         // Hacemos que el radar se quede fijo en lugar de que se mueva.
         
-        setTurnRadarRight(2.0 * Utils.normalRelativeAngleDegrees(getHeading() + e.getBearing() - getRadarHeading()));
+        setTurnRadarRight(2.0 * Utils.normalRelativeAngleDegrees(getHeading() 
+                + e.getBearing() - getRadarHeading()));
         setTurnRight(e.getBearing());
         
+        //Si la distancia es mayor que 200 avanzamos hasta el enemigo. 
+        //Una vez cerca hacemos círculos para acorralarlo y dispararle.
         if(e.getDistance() > 200) {
             setAhead(e.getDistance());
         }
@@ -70,6 +73,8 @@ public class RobotIronPan extends AdvancedRobot{
      * @param e Permite obtener información del disparo que hemos recibido.
      */
     public void onHitByBullet(HitByBulletEvent e) {
+        
+        //Al recibir una bala giramos y cambiamos de dirección.
         direction = -1;
         setTurnRight(e.getBearing() * - 30);
         setAhead(150 * direction);
@@ -80,6 +85,8 @@ public class RobotIronPan extends AdvancedRobot{
      * @param e Permite obtener información de la pared que hemos chocado
      */
     public void onHitWall(HitWallEvent e) {
+        
+        //Cuando chocamos con un muro giramos y avanzamos lo suficiente como para no volver a chocar.
         setTurnRight(500);
         setAhead(800);
     }
@@ -90,23 +97,30 @@ public class RobotIronPan extends AdvancedRobot{
      */
     public void circularTarget(ScannedRobotEvent e) {
         
+        //Calculamos el ángulo que suma nuestro robot con el del contrincante
+        
         double absoluteBearing = getHeadingRadians() + e.getBearingRadians();
         
+        //Predecimos las coordenadas de nuestro contrincante.
         scannedX = getX() + e.getDistance() * Math.sin(absoluteBearing);
         scannedY = getY() + e.getDistance() * Math.cos(absoluteBearing);
         
+        //Distintas variables de posicionamiento de nuestro contrincante.
         double eHeading = e.getHeadingRadians();
         double eHeadingChange = eHeading - oldEnemyHeading;
         double eVelocity = e.getVelocity();
         oldEnemyHeading = eHeading;
         
+        //Llamamos a la función que se encargará de predecir los movimientos.
         predictedData(eHeading, eVelocity, eHeadingChange);
         
+        //Ángulo que se calcula respecto a nosotros y la posición del contrincante.
         double angleTheta = Utils.normalAbsoluteAngle(Math.atan2(scannedX - getX(), scannedY - getY()));
         
         setTurnRadarRightRadians(Utils.normalRelativeAngle(absoluteBearing - getRadarHeadingRadians()));
         setTurnGunRightRadians(Utils.normalRelativeAngle(angleTheta - getGunHeadingRadians()));
         
+        //Llamamos a la función que se encarga de disparar.
         chooseShot(e);
         
     }
@@ -121,11 +135,15 @@ public class RobotIronPan extends AdvancedRobot{
      */
     public void predictedData(double eHeading, double eVelocity, double eHeadingChange){
         
-        boolean exit = false;
-        double deltaTime = 0;
+        //Variable que contará el tiempo en lo que tarda el recorrido del disparo.
+        double helpTime = 0;
+        
+        //Variables predichas anteriormente.
         double predX = scannedX, predY = scannedY;
         
-        while((++deltaTime) * bulletVelocity < Point2D.Double.distance(getX(), getY(), predX, predY)){		
+        //Mientras el tiempo que tarda la bala en llegar al enemigo, no sea superior al tiempo que necesita para llegar desde la posicion
+        //actual hasta la posición predecida del tanque enemigo, seguimos haciendo predicciones
+        while((++helpTime) * bulletVelocity < Point2D.Double.distance(getX(), getY(), predX, predY)){		
                 predX += Math.sin(eHeading) * eVelocity;
                 predY += Math.cos(eHeading) * eVelocity;
                 eHeading += eHeadingChange;
@@ -136,18 +154,25 @@ public class RobotIronPan extends AdvancedRobot{
     }
     
     /**
-     * Función que mide la potencia con la que podemos disparar.
+     * Función que mide la potencia con la que podemos 
+     * disparar, dependiendo de la energía qeu tengamos.
      * @param e Contiene información del robot.
      */
     public void chooseShot(ScannedRobotEvent e) {
         
+        //Si la distancia es cercana disparamos con fuego 1 o 2.
         if(e.getDistance() < 500 && e.getDistance() > 200) {
+            
+            //Si la energía es mayor a 80 disparamos más fuerte.
+            
             if(getEnergy() > 80){
                 fire(2);
             }
             else fire(1);
         }
         else if(e.getDistance() < 200){
+            
+            // Si estamos cerca y la energía es mayor a 50, aniquilamos.
             if(getEnergy() > 50) {
                 fire(Rules.MAX_BULLET_POWER);
             }
